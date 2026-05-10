@@ -1,0 +1,1473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>dharmik@portfolio — terminal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #21222C;
+      --bg2:     #191A21;
+      --bg3:     #282A36;
+      --line:    #44475A;
+      --fg:      #F8F8F2;
+      --dim:     #6272A4;
+      --red:     #FF5555;
+      --orange:  #FFB86C;
+      --yellow:  #F1FA8C;
+      --green:   #50FA7B;
+      --cyan:    #8BE9FD;
+      --purple:  #BD93F9;
+      --pink:    #FF79C6;
+      --font:    'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg2);
+      font-family: var(--font);
+      color: var(--fg);
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Canvas ── */
+    #bgCanvas {
+      position: fixed; inset: 0;
+      width: 100%; height: 100%;
+      z-index: 0; pointer-events: none;
+    }
+
+    /* ── Scene ── */
+    .scene {
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1;
+      perspective: 1400px;
+      perspective-origin: 50% 50%;
+    }
+
+    /* ── Terminal wrapper (3D tilt target) ── */
+    .term-wrap {
+      width: min(880px, 94vw);
+      will-change: transform;
+    }
+
+    /* ── Terminal window ── */
+    .terminal {
+      background: var(--bg3);
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(189,147,249,.3);
+      box-shadow:
+        0 0 0 1px rgba(189,147,249,.06),
+        0 4px 16px rgba(0,0,0,.5),
+        0 16px 48px rgba(0,0,0,.5),
+        0 0 60px rgba(189,147,249,.10),
+        0 0 120px rgba(139,233,253,.05),
+        inset 0 1px 0 rgba(255,255,255,.04);
+      position: relative;
+    }
+
+    /* CRT scan lines */
+    .terminal::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,.025) 2px,
+        rgba(0,0,0,.025) 4px
+      );
+      pointer-events: none;
+      border-radius: 14px;
+      z-index: 20;
+    }
+
+    /* Purple glow line at top */
+    .terminal::before {
+      content: '';
+      position: absolute; top: 0; left: 10%; right: 10%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--purple), transparent);
+      opacity: .5;
+      z-index: 21;
+    }
+
+    /* ── Chrome bar ── */
+    .term-chrome {
+      background: var(--bg2);
+      height: 42px;
+      display: flex; align-items: center;
+      padding: 0 1rem;
+      gap: .85rem;
+      border-bottom: 1px solid var(--line);
+      user-select: none;
+      flex-shrink: 0;
+    }
+
+    .tc-dots { display: flex; gap: 7px; align-items: center; flex-shrink: 0; }
+    .tc-dot {
+      width: 12px; height: 12px; border-radius: 50%;
+      cursor: pointer;
+      transition: filter .15s, transform .15s;
+      position: relative;
+    }
+    .tc-dot:hover { filter: brightness(1.25); transform: scale(1.15); }
+    .td-red    { background: #FF5555; box-shadow: 0 0 8px #FF555588; }
+    .td-yellow { background: #F1FA8C; box-shadow: 0 0 8px #F1FA8C88; }
+    .td-green  { background: #50FA7B; box-shadow: 0 0 8px #50FA7B88; }
+
+    .tc-title {
+      flex: 1; text-align: center;
+      font-size: .68rem; color: var(--dim);
+      letter-spacing: .04em; white-space: nowrap; overflow: hidden;
+    }
+
+    .tc-back {
+      font-size: .65rem; color: var(--dim);
+      text-decoration: none; letter-spacing: .04em;
+      padding: .25rem .65rem;
+      border: 1px solid var(--line); border-radius: 5px;
+      flex-shrink: 0;
+      transition: color .2s, border-color .2s, background .2s;
+    }
+    .tc-back:hover { color: var(--purple); border-color: var(--purple); background: rgba(189,147,249,.08); }
+
+    /* ── Body ── */
+    .term-body {
+      height: clamp(340px, 60vh, 580px);
+      overflow-y: auto;
+      padding: 1.1rem 1.5rem;
+      font-size: .8rem;
+      line-height: 1.7;
+      position: relative;
+      z-index: 1;
+    }
+    .term-body::-webkit-scrollbar { width: 3px; }
+    .term-body::-webkit-scrollbar-track { background: transparent; }
+    .term-body::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+
+    /* ── Output lines ── */
+    .out-line { margin: 0; white-space: pre-wrap; word-break: break-word; min-height: 1.4em; }
+    .out-blank { height: .55em; }
+    .out-cmd { display: flex; gap: .4rem; align-items: baseline; flex-wrap: nowrap; }
+    .out-prompt { color: var(--green); white-space: nowrap; flex-shrink: 0; }
+    .out-cmd-text { color: var(--cyan); }
+
+    /* ASCII art */
+    .ascii { color: var(--purple); font-size: .7rem; line-height: 1.22; letter-spacing: .01em; }
+
+    /* ── Input row ── */
+    .term-input-row {
+      display: flex; align-items: center;
+      padding: .7rem 1.5rem;
+      border-top: 1px solid var(--line);
+      background: rgba(0,0,0,.18);
+      gap: 0; flex-shrink: 0;
+      position: relative; z-index: 2;
+    }
+    .t-prompt {
+      color: var(--green); font-size: .8rem;
+      white-space: nowrap; flex-shrink: 0; user-select: none;
+    }
+    #cmdInput {
+      flex: 1;
+      background: transparent; border: none; outline: none;
+      font-family: var(--font); font-size: .8rem;
+      color: var(--cyan); caret-color: transparent;
+      padding: 0; min-width: 0;
+    }
+    .t-cursor {
+      display: inline-block;
+      width: 7px; height: 13px;
+      background: var(--purple);
+      animation: blink .95s step-end infinite;
+      border-radius: 1px; flex-shrink: 0;
+      box-shadow: 0 0 6px var(--purple);
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    /* ── Color helpers ── */
+    .cp  { color: var(--purple); }
+    .cc  { color: var(--cyan); }
+    .cg  { color: var(--green); }
+    .cy  { color: var(--yellow); }
+    .cr  { color: var(--red); }
+    .co  { color: var(--orange); }
+    .cpk { color: var(--pink); }
+    .cd  { color: var(--dim); }
+    .cf  { color: var(--fg); }
+    .b   { font-weight: 700; }
+    .dim { opacity: .5; }
+    a.tlink { color: var(--cyan); text-decoration: none; }
+    a.tlink:hover { text-decoration: underline; color: var(--purple); }
+
+    /* Progress bar */
+    .pbar-track {
+      display: inline-block;
+      background: var(--line);
+      border-radius: 2px;
+      overflow: hidden;
+      vertical-align: middle;
+    }
+    .pbar-fill { display: block; height: 100%; border-radius: 2px; }
+
+    /* Help table */
+    .htbl { border-collapse: collapse; }
+    .htbl td { padding: .12rem 1.2rem .12rem 0; vertical-align: top; }
+    .htbl td:first-child { color: var(--cyan); min-width: 140px; }
+    .htbl td:last-child  { color: var(--dim);  }
+
+    /* ── Hint bar ── */
+    .hint-bar {
+      position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%);
+      font-size: .62rem; color: var(--dim);
+      letter-spacing: .05em;
+      background: rgba(25,26,33,.92);
+      padding: .35rem 1rem; border-radius: 20px;
+      border: 1px solid var(--line);
+      white-space: nowrap;
+      z-index: 10;
+      opacity: 0;
+      pointer-events: none;
+      animation: hintIn .5s 5s ease both;
+    }
+    @keyframes hintIn { from{opacity:0;transform:translateX(-50%) translateY(6px)} to{opacity:.9;transform:translateX(-50%) translateY(0)} }
+
+    kbd {
+      display: inline-block;
+      background: var(--line); color: var(--fg);
+      border-radius: 3px; padding: 0 .35em; font-size: .85em;
+    }
+
+    /* Matrix canvas overlay */
+    #matrixCanvas {
+      display: none;
+      position: absolute; inset: 0;
+      z-index: 15; pointer-events: none;
+      border-radius: 14px;
+    }
+
+    /* Glitch flicker for hack */
+    @keyframes glitch {
+      0%,100%{transform:none;filter:none}
+      20%{transform:translate(-2px,1px) skewX(.5deg);filter:hue-rotate(90deg)}
+      40%{transform:translate(2px,-1px) skewX(-.5deg);filter:hue-rotate(-90deg)}
+      60%{transform:translate(-1px,2px);filter:none}
+    }
+    .glitching { animation: glitch .15s 4; }
+
+    /* Mobile */
+    @media(max-width:600px) {
+      .ascii { font-size: .48rem; }
+      .term-body { font-size: .72rem; }
+      #cmdInput { font-size: .72rem; }
+      .t-prompt { font-size: .72rem; }
+      .hint-bar { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+
+<div class="scene" id="scene">
+  <div class="term-wrap" id="termWrap">
+    <div class="terminal" id="terminal">
+      <canvas id="matrixCanvas"></canvas>
+
+      <div class="term-chrome">
+        <div class="tc-dots">
+          <span class="tc-dot td-red"    id="btnClose"  title="Close"></span>
+          <span class="tc-dot td-yellow" id="btnMin"    title="Minimize"></span>
+          <span class="tc-dot td-green"  id="btnMax"    title="Maximize"></span>
+        </div>
+        <div class="tc-title" id="tcTitle">dharmik@portfolio: ~/terminal — zsh</div>
+        <a href="index.html" class="tc-back">← portfolio</a>
+      </div>
+
+      <div class="term-body" id="termBody"></div>
+
+      <div class="term-input-row">
+        <span class="t-prompt" id="promptLabel">dharmik@portfolio:~$ </span>
+        <input type="text" id="cmdInput" autocomplete="off" autocorrect="off"
+               autocapitalize="off" spellcheck="false">
+        <span class="t-cursor"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="hint-bar">
+  <kbd>↑</kbd><kbd>↓</kbd> history &nbsp;·&nbsp;
+  <kbd>Tab</kbd> complete &nbsp;·&nbsp;
+  type <span class="cp">help</span> for commands
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════
+   THREE.JS CINEMATIC UNIVERSE — terminal.html
+   Holographic sphere · Orbital rings · Nebula · Crystals
+═══════════════════════════════════════════════════════════ */
+try { (function initThree() { // eslint-disable-line
+  const canvas   = document.getElementById('bgCanvas');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setClearColor(0x000000, 0);
+
+  const scene  = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 500);
+  camera.position.z = 6;
+
+  /* ── Glow sprite factory ── */
+  function sprite(r, g, b, a = 1) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const ctx = c.getContext('2d');
+    const grd = ctx.createRadialGradient(32,32,0,32,32,32);
+    grd.addColorStop(0,    `rgba(${r},${g},${b},${a})`);
+    grd.addColorStop(0.35, `rgba(${r},${g},${b},${a*.7})`);
+    grd.addColorStop(1,    `rgba(${r},${g},${b},0)`);
+    ctx.fillStyle = grd; ctx.fillRect(0,0,64,64);
+    return new THREE.CanvasTexture(c);
+  }
+  const SPR_WHITE = sprite(200,220,255);
+  const SPR_CYAN  = sprite(100,255,218);
+  const SPR_PURPLE= sprite(189,147,249);
+
+  /* ══ 1. STAR FIELD ══ */
+  {
+    const N = 5000;
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(N * 3);
+    const col = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      pos[i*3]   = (Math.random()-.5)*180;
+      pos[i*3+1] = (Math.random()-.5)*180;
+      pos[i*3+2] = (Math.random()-.5)*100;
+      const r = Math.random();
+      if      (r < .55) { col[i*3]=.78; col[i*3+1]=.88; col[i*3+2]=1.0; }
+      else if (r < .80) { col[i*3]=.74; col[i*3+1]=.58; col[i*3+2]=.98; }
+      else              { col[i*3]=.39; col[i*3+1]=1.0;  col[i*3+2]=.85; }
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+    geo.setAttribute('color',    new THREE.BufferAttribute(col,3));
+    scene.add(new THREE.Points(geo, new THREE.PointsMaterial({
+      size:.12, map:SPR_WHITE, vertexColors:true,
+      transparent:true, depthWrite:false,
+      blending:THREE.AdditiveBlending,
+    })));
+  }
+
+  /* ══ 2. HOLOGRAPHIC SPHERE ══ */
+  let holoMesh, holoU;
+  {
+    holoU = {
+      uTime:      { value: 0 },
+      uColorEdge: { value: new THREE.Color(0x8BE9FD) },  // Dracula cyan
+      uColorCore: { value: new THREE.Color(0x21222C) },  // Dracula bg
+    };
+    holoMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(2.2, 80, 80),
+      new THREE.ShaderMaterial({
+        uniforms: holoU,
+        vertexShader: `
+          uniform float uTime;
+          varying vec3 vNormal;
+          varying vec3 vWorldPos;
+          varying vec2 vUv;
+          void main(){
+            vNormal   = normalize(normalMatrix * normal);
+            vUv       = uv;
+            vec3 p    = position;
+            float d   = sin(p.x*6.0+uTime*1.6)*cos(p.y*6.0+uTime*1.0)*cos(p.z*5.0)*0.06;
+            p        += normal*d;
+            vec4 wp   = modelMatrix*vec4(p,1.0);
+            vWorldPos = wp.xyz;
+            gl_Position = projectionMatrix*modelViewMatrix*vec4(p,1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform float uTime;
+          uniform vec3  uColorEdge;
+          uniform vec3  uColorCore;
+          varying vec3  vNormal;
+          varying vec3  vWorldPos;
+          varying vec2  vUv;
+          void main(){
+            vec3 view  = normalize(cameraPosition - vWorldPos);
+            float fres = pow(1.0 - abs(dot(vNormal, view)), 2.8);
+            float scan = step(0.48, fract(vUv.y*55.0 - uTime*1.0))*0.22;
+            float gx   = step(0.94, fract(vUv.x*22.0));
+            float gy   = step(0.94, fract(vUv.y*22.0));
+            float grid = clamp(gx+gy,0.0,1.0)*0.2;
+            float pls  = 0.55+0.45*sin(uTime*1.4+vUv.y*8.0);
+            vec3 col   = mix(uColorCore, uColorEdge, fres*pls*1.4+scan+grid);
+            float alp  = fres*0.82+scan*0.9+grid*0.8+0.04;
+            gl_FragColor = vec4(col, clamp(alp,0.0,1.0));
+          }
+        `,
+        transparent:true, blending:THREE.AdditiveBlending,
+        depthWrite:false, side:THREE.FrontSide,
+      })
+    );
+    holoMesh.position.set(3.8, 0.4, -2);
+    scene.add(holoMesh);
+  }
+
+  /* ══ 3. ORBITAL RINGS + TRAVELING DOTS ══ */
+  const orbDots = [];
+  {
+    const RING_CFG = [
+      { r:3.2, tX: Math.PI*.38,  tZ:0,           nPts:8,  spd: 1.1 },
+      { r:3.9, tX:-Math.PI*.22,  tZ:Math.PI*.18,  nPts:6,  spd:-0.7 },
+      { r:4.6, tX: Math.PI*.12,  tZ:Math.PI*.44,  nPts:10, spd: 0.5 },
+    ];
+    const GROUP = new THREE.Group();
+    GROUP.position.set(3.8, 0.4, -2);
+    scene.add(GROUP);
+
+    RING_CFG.forEach(cfg => {
+      const pts = [];
+      for (let i = 0; i <= 128; i++) {
+        const a = (i/128)*Math.PI*2;
+        pts.push(new THREE.Vector3(Math.cos(a)*cfg.r, 0, Math.sin(a)*cfg.r));
+      }
+      const ring = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(pts),
+        new THREE.LineBasicMaterial({ color:0x8BE9FD, transparent:true, opacity:.14, blending:THREE.AdditiveBlending })
+      );
+      ring.rotation.x = cfg.tX; ring.rotation.z = cfg.tZ;
+      GROUP.add(ring);
+
+      for (let i = 0; i < cfg.nPts; i++) {
+        const dot = new THREE.Mesh(
+          new THREE.SphereGeometry(.07, 6, 6),
+          new THREE.MeshBasicMaterial({ color:0x8BE9FD, blending:THREE.AdditiveBlending, transparent:true, depthWrite:false })
+        );
+        dot.userData = { angle:(i/cfg.nPts)*Math.PI*2, r:cfg.r, spd:cfg.spd, tX:cfg.tX, tZ:cfg.tZ };
+        scene.add(dot);
+        orbDots.push(dot);
+      }
+    });
+  }
+
+  function updateOrbital() {
+    orbDots.forEach(dot => {
+      const d = dot.userData;
+      d.angle += d.spd * .012;
+      const lx = Math.cos(d.angle)*d.r;
+      const lz = Math.sin(d.angle)*d.r;
+      const cX = Math.cos(d.tX), sX = Math.sin(d.tX);
+      const cZ = Math.cos(d.tZ), sZ = Math.sin(d.tZ);
+      const y1 = -lz*sX, z1 = lz*cX;
+      const x2 = lx*cZ - y1*sZ, y2 = lx*sZ + y1*cZ;
+      dot.position.set(x2+3.8, y2+0.4, z1-2);
+    });
+  }
+
+  /* ══ 4. NEBULA CLOUD (around sphere) ══ */
+  {
+    const N = 1600;
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(N*3);
+    for (let i = 0; i < N; i++) {
+      const phi = Math.acos(2*Math.random()-1);
+      const th  = Math.random()*Math.PI*2;
+      const r   = 2.4 + Math.random()*2.2;
+      pos[i*3]   = Math.sin(phi)*Math.cos(th)*r + 3.8;
+      pos[i*3+1] = Math.sin(phi)*Math.sin(th)*r + 0.4;
+      pos[i*3+2] = Math.cos(phi)*r - 2;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+    scene.add(new THREE.Points(geo, new THREE.PointsMaterial({
+      size:.07, map:SPR_CYAN, transparent:true,
+      depthWrite:false, blending:THREE.AdditiveBlending, opacity:.45,
+    })));
+  }
+
+  /* ══ 5. FLOATING CRYSTALS (scattered around terminal) ══ */
+  const crystals = [];
+  {
+    const CFGS = [
+      { x:-6.5, y: 3.0, z:-3.5, s:.50, sp:.28, ph:0.0 },
+      { x: 7.2, y: 2.5, z:-3.0, s:.42, sp:.35, ph:1.1 },
+      { x:-7.0, y:-2.8, z:-4.0, s:.58, sp:.22, ph:2.2 },
+      { x: 6.8, y:-2.5, z:-3.5, s:.38, sp:.40, ph:3.3 },
+      { x:-5.5, y: 0.8, z:-5.0, s:.48, sp:.18, ph:0.7 },
+      { x: 5.8, y:-1.2, z:-4.5, s:.44, sp:.30, ph:1.9 },
+      { x:-4.0, y: 4.2, z:-6.0, s:.35, sp:.38, ph:2.8 },
+      { x: 4.5, y:-3.8, z:-5.5, s:.52, sp:.25, ph:0.4 },
+    ];
+    CFGS.forEach((c, i) => {
+      const geo = i%3===0
+        ? new THREE.OctahedronGeometry(c.s, 0)
+        : i%3===1
+          ? new THREE.IcosahedronGeometry(c.s, 1)
+          : new THREE.TetrahedronGeometry(c.s, 0);
+      const mat = new THREE.MeshStandardMaterial({
+        color:0x282A36, emissive:0xBD93F9, emissiveIntensity:.4,
+        metalness:.95, roughness:.05, transparent:true, opacity:.88,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(c.x, c.y, c.z);
+      mesh.userData = { baseY:c.y, sp:c.sp, phase:c.ph };
+      const edges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(geo),
+        new THREE.LineBasicMaterial({ color:0xBD93F9, transparent:true, opacity:.55, blending:THREE.AdditiveBlending })
+      );
+      mesh.add(edges);
+      scene.add(mesh);
+      crystals.push(mesh);
+    });
+
+    // Ambient light for crystal reflections
+    scene.add(new THREE.AmbientLight(0xBD93F9, 0.4));
+    const pLight = new THREE.PointLight(0x8BE9FD, 1.2, 20);
+    pLight.position.set(3.8, 0.4, 2);
+    scene.add(pLight);
+  }
+
+  /* ══ 6. SHOOTING STAR ══ */
+  let shootX=0, shootY=0, shootDX=0, shootDY=0, shootLife=0;
+  const shootGeo = new THREE.BufferGeometry();
+  const shootPos = new Float32Array(6);
+  shootGeo.setAttribute('position', new THREE.BufferAttribute(shootPos,3));
+  const shootMat = new THREE.LineBasicMaterial({
+    color:0xffffff, transparent:true, opacity:0,
+    blending:THREE.AdditiveBlending,
+  });
+  scene.add(new THREE.Line(shootGeo, shootMat));
+  let shootTimer = 0;
+  function spawnShoot() {
+    shootX  = (Math.random()-.5)*40;
+    shootY  = 12 + Math.random()*8;
+    shootDX = (Math.random()-.5)*.5;
+    shootDY = -(0.22 + Math.random()*.22);
+    shootLife = 60 + Math.random()*40;
+  }
+
+  /* Mouse parallax */
+  let mxT=0, myT=0, mxC=0, myC=0;
+  window.addEventListener('mousemove', e => {
+    mxT = (e.clientX/innerWidth  - .5)*2;
+    myT = (e.clientY/innerHeight - .5)*2;
+  });
+
+  window.addEventListener('resize', () => {
+    camera.aspect = innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  let clock = 0;
+  function animate() {
+    requestAnimationFrame(animate);
+    clock += 0.0005;
+
+    /* Holographic sphere */
+    holoU.uTime.value = clock * 120;
+    holoMesh.rotation.y = clock * 0.28;
+    holoMesh.rotation.x = clock * 0.09;
+
+    /* Orbital dots */
+    updateOrbital();
+
+    /* Crystals float */
+    crystals.forEach(c => {
+      const d = c.userData;
+      c.position.y = d.baseY + Math.sin(clock*120*d.sp + d.phase)*0.18;
+      c.rotation.x += 0.006 * d.sp;
+      c.rotation.y += 0.009 * d.sp;
+    });
+
+    /* Camera slow drift */
+    mxC += (mxT - mxC) * 0.02;
+    myC += (myT - myC) * 0.02;
+    camera.position.x += (mxC*.6 - camera.position.x)*.035;
+    camera.position.y += (-myC*.35 - camera.position.y)*.035;
+    camera.lookAt(0, 0, 0);
+
+    /* Shooting star */
+    shootTimer++;
+    if (shootTimer > 200 + Math.random()*200) { spawnShoot(); shootTimer = 0; }
+    if (shootLife > 0) {
+      shootLife--;
+      shootX += shootDX; shootY += shootDY;
+      const tail = 3.5;
+      shootPos[0]=shootX;          shootPos[1]=shootY;          shootPos[2]=0;
+      shootPos[3]=shootX-shootDX*tail; shootPos[4]=shootY-shootDY*tail; shootPos[5]=0;
+      shootGeo.attributes.position.needsUpdate = true;
+      shootMat.opacity = Math.min(shootLife/20, 1)*0.75;
+    } else {
+      shootMat.opacity = 0;
+    }
+
+    renderer.render(scene, camera);
+  }
+  animate();
+})();
+} catch(e) { console.warn('Three.js background failed:', e); }
+
+
+/* ═══════════════════════════════════════════════════════════
+   3D TILT + FLOAT
+═══════════════════════════════════════════════════════════ */
+try { (function initTilt() {
+  const wrap = document.getElementById('termWrap');
+  let tX = 0, tY = 0, cX = 0, cY = 0, floatT = 0;
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  function loop() {
+    floatT += 0.012;
+    const floatY = Math.sin(floatT) * 7;
+    cX = lerp(cX, tX, 0.065);
+    cY = lerp(cY, tY, 0.065);
+    wrap.style.transform =
+      `rotateX(${cY}deg) rotateY(${cX}deg) translateY(${floatY}px)`;
+    requestAnimationFrame(loop);
+  }
+  loop();
+
+  window.addEventListener('mousemove', e => {
+    const cx = innerWidth / 2, cy = innerHeight / 2;
+    tX =  ((e.clientX - cx) / cx) * 7;
+    tY = -((e.clientY - cy) / cy) * 5;
+  });
+  window.addEventListener('mouseleave', () => { tX = 0; tY = 0; });
+})();
+} catch(e) { console.warn('Tilt failed:', e); }
+
+
+/* ═══════════════════════════════════════════════════════════
+   TERMINAL ENGINE
+═══════════════════════════════════════════════════════════ */
+const body      = document.getElementById('termBody');
+const inputEl   = document.getElementById('cmdInput');
+const pLabel    = document.getElementById('promptLabel');
+const tcTitle   = document.getElementById('tcTitle');
+
+let currentDir  = '~';
+let locked      = false;
+let cmdHistory  = [];
+let histIdx     = -1;
+let matrixActive = false;
+
+/* ── Utilities ── */
+const $ = id => document.getElementById(id);
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;');
+}
+
+function prompt() {
+  return `dharmik@portfolio:${currentDir}$ `;
+}
+
+function scrollBot() { body.scrollTop = body.scrollHeight; }
+
+function line(html = '', extra = '') {
+  const p = document.createElement('p');
+  p.className = 'out-line' + (extra ? ' ' + extra : '');
+  p.innerHTML = html;
+  body.appendChild(p);
+  scrollBot();
+  return p;
+}
+
+function blank() {
+  const p = document.createElement('p');
+  p.className = 'out-blank';
+  body.appendChild(p);
+  scrollBot();
+}
+
+function cmdLine(raw) {
+  const p = document.createElement('p');
+  p.className = 'out-line out-cmd';
+  p.innerHTML =
+    `<span class="out-prompt">${esc(prompt())}</span>` +
+    `<span class="out-cmd-text">${esc(raw)}</span>`;
+  body.appendChild(p);
+  scrollBot();
+}
+
+function lock()   { locked = true;  inputEl.disabled = true; }
+function unlock() { locked = false; inputEl.disabled = false; inputEl.focus(); }
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function typewrite(el, text, speed = 38) {
+  return new Promise(res => {
+    let i = 0;
+    const iv = setInterval(() => {
+      el.textContent += text[i++];
+      scrollBot();
+      if (i >= text.length) { clearInterval(iv); res(); }
+    }, speed);
+  });
+}
+
+/* Bar helper: filled/empty blocks */
+function bar(pct, width = 20, colorClass = 'cp') {
+  const f = Math.round(pct / 100 * width);
+  const filled = '█'.repeat(f);
+  const empty  = '░'.repeat(width - f);
+  return `<span class="${colorClass}">${filled}</span><span class="dim">${empty}</span>`;
+}
+
+/* ── Command definitions ── */
+
+function cmdHelp() {
+  const rows = [
+    ['whoami',        'About me — who is Dharmik?'],
+    ['neofetch',      'System info — portfolio stats'],
+    ['skills',        'Tech stack with proficiency bars'],
+    ['projects',      'Recent projects  [--all]'],
+    ['experience',    'Work history & timeline'],
+    ['contact',       'How to reach me'],
+    ['resume',        'Open resume PDF'],
+    ['ls [dir]',      'List directory contents'],
+    ['cat [file]',    'Read a file'],
+    ['cd [dir]',      'Change directory'],
+    ['pwd',           'Print working directory'],
+    ['git [sub]',     'log · status · branch'],
+    ['scan',          'Network port scanner'],
+    ['ping',          'Ping dharmik.dev'],
+    ['date',          'Current timestamp'],
+    ['uptime',        'Portfolio uptime'],
+    ['matrix',        '🐇 Follow the white rabbit'],
+    ['hack',          '💀 I\'m in'],
+    ['clear',         'Clear the terminal'],
+    ['portfolio',     'Back to main portfolio'],
+    ['exit',          'Close terminal'],
+  ];
+  blank();
+  line(`<span class="cp b">Available Commands</span>  <span class="cd">— type any command and press Enter</span>`);
+  blank();
+  const tbl = document.createElement('table');
+  tbl.className = 'htbl';
+  for (const [c, d] of rows) {
+    const tr = tbl.insertRow();
+    tr.innerHTML = `<td>${esc(c)}</td><td>${esc(d)}</td>`;
+  }
+  const wrap = document.createElement('p');
+  wrap.className = 'out-line';
+  wrap.style.paddingLeft = '.5rem';
+  wrap.appendChild(tbl);
+  body.appendChild(wrap);
+  blank();
+  scrollBot();
+}
+
+function cmdWhoami() {
+  blank();
+  line(`<span class="cp b">Dharmik Dholariya</span>  <span class="cd">// Full Stack Developer · CS Student</span>`);
+  blank();
+  line(`  <span class="cd">▸</span> Passionate about building products that sit at the intersection`);
+  line(`    of <span class="cc">great design</span> and <span class="cg">robust engineering</span>.`);
+  blank();
+  line(`  <span class="cd">▸</span> I build <span class="cp">full-stack</span> web apps, <span class="cy">ML/AI</span> pipelines,`);
+  line(`    and high-performance <span class="cg">Go</span> backends.`);
+  blank();
+  line(`  <span class="cd">Status  </span>  <span class="cg">● Open to internships & full-time roles</span>`);
+  line(`  <span class="cd">Location</span>  <span class="cf">India 🇮🇳</span>`);
+  line(`  <span class="cd">Stack   </span>  <span class="cc">React · Go · TypeScript · Python · Three.js</span>`);
+  blank();
+}
+
+function cmdNeofetch() {
+  blank();
+  const rows = [
+    [`<span class="cp">        .          </span>`, `<span class="cp b">dharmik</span><span class="cd">@</span><span class="cc b">portfolio</span>`],
+    [`<span class="cp">       .:.         </span>`, `<span class="cd">─────────────────────────────</span>`],
+    [`<span class="cp">      .:.::.       </span>`, `<span class="cd">OS:       </span><span class="cf">Portfolio OS v2.0.26</span>`],
+    [`<span class="cp">     .:.  .::.     </span>`, `<span class="cd">Host:     </span><span class="cf">GitHub Pages · Vercel</span>`],
+    [`<span class="cp">    .:.    .::.    </span>`, `<span class="cd">Kernel:   </span><span class="cf">React 18 + Go 1.21</span>`],
+    [`<span class="cp">   .:.  ::::.::.   </span>`, `<span class="cd">Shell:    </span><span class="cf">zsh 5.9 (JetBrains Mono)</span>`],
+    [`<span class="cp">   ':.:::::::.:'   </span>`, `<span class="cd">WM:       </span><span class="cf">VSCode + Neovim</span>`],
+    [`<span class="cp">    '::::::::::'   </span>`, `<span class="cd">CPU:      </span><span class="cf">Brain @ 3.2 GHz (overclocked)</span>`],
+    [`<span class="cp">     ':::::::::'   </span>`, `<span class="cd">Memory:   </span><span class="cf">∞ GB / ∞ GB  (coffee-powered)</span>`],
+    [`<span class="cp">         </span>         `, `<span class="cd">Uptime:   </span><span class="cf">Always building something</span>`],
+    [`<span class="cp">         </span>         `, ``],
+    [`<span class="cp">         </span>         `,
+      `<span style="display:inline-flex;gap:4px;align-items:center">${
+        ['#FF5555','#FFB86C','#F1FA8C','#50FA7B','#8BE9FD','#BD93F9','#FF79C6']
+        .map(c=>`<span style="display:inline-block;width:13px;height:13px;border-radius:50%;background:${c};box-shadow:0 0 6px ${c}88"></span>`)
+        .join('')
+      }</span>`
+    ],
+  ];
+  for (const [art, info] of rows) {
+    line(`${art}  ${info}`);
+  }
+  blank();
+}
+
+function cmdSkills() {
+  blank();
+  line(`<span class="cp b">Tech Stack</span>  <span class="cd">// proficiency levels</span>`);
+  blank();
+
+  const cats = [
+    { name: 'Frontend', icon: '⚡', cls: 'cc', items: [
+      ['React / Next.js',  90], ['TypeScript',       88],
+      ['Tailwind CSS',     85], ['Three.js / WebGL', 72],
+    ]},
+    { name: 'Backend', icon: '⚙️',  cls: 'cg', items: [
+      ['Go',               85], ['Node.js / Express',83],
+      ['PostgreSQL',       80], ['Redis',            70],
+    ]},
+    { name: 'ML / AI', icon: '🧠', cls: 'cy', items: [
+      ['Python',           87], ['PyTorch',          78],
+      ['LangChain',        72], ['scikit-learn',     75],
+    ]},
+    { name: 'DevOps', icon: '🚀',  cls: 'cp', items: [
+      ['Docker',           82], ['GitHub Actions',   85],
+      ['AWS / GCP',        68], ['Linux / Bash',     80],
+    ]},
+  ];
+
+  for (const cat of cats) {
+    line(`<span class="${cat.cls} b">${cat.icon}  ${cat.name}</span>`);
+    for (const [name, pct] of cat.items) {
+      const label = name.padEnd(22, ' ');
+      const pctStr = String(pct).padStart(3);
+      line(`  <span class="cd">${esc(label)}</span> ${bar(pct, 20, cat.cls)} <span class="dim">${pctStr}%</span>`);
+    }
+    blank();
+  }
+}
+
+function cmdProjects(args = []) {
+  const all = args.includes('--all');
+  blank();
+  line(`<span class="cp b">Projects</span>  <span class="cd">// ${all ? 'all projects' : 'top 5 — run \'projects --all\' for more'}</span>`);
+  blank();
+
+  const list = [
+    { name:'EBF Platform',        lang:'TypeScript', stars:48,  tech:'React · Go · PostgreSQL',    desc:'Full-stack enterprise budgeting platform with real-time analytics.' },
+    { name:'AI Resume Builder',   lang:'Python',     stars:134, tech:'Next.js · Python · OpenAI',  desc:'LLM-powered resume tailoring with ATS optimization scoring.' },
+    { name:'DevTrack CLI',        lang:'Go',         stars:67,  tech:'Go · SQLite · Cobra',         desc:'Terminal-based project management tool for solo developers.' },
+    { name:'3D Portfolio',        lang:'JavaScript', stars:89,  tech:'Three.js · GLSL · HTML',      desc:'This very portfolio — cinematic 3D scroll-driven experience.' },
+    { name:'Neuro Notes',         lang:'TypeScript', stars:55,  tech:'React · Node · MongoDB',      desc:'AI-enhanced note-taking with semantic search & auto-linking.' },
+    { name:'GoQueue',             lang:'Go',         stars:102, tech:'Go · Redis · gRPC',           desc:'High-performance distributed task queue with Web UI.' },
+    { name:'PixelSort',           lang:'Python',     stars:210, tech:'Python · NumPy · Pillow',     desc:'CLI image glitch-art generator with 12 sorting algorithms.' },
+  ];
+
+  const shown = all ? list : list.slice(0, 5);
+  const langColor = { TypeScript:'cc', Go:'cg', Python:'cy', JavaScript:'co' };
+
+  for (const [i, p] of shown.entries()) {
+    const lc = langColor[p.lang] || 'cf';
+    line(` <span class="cp">${String(i+1).padStart(2)}.</span> <span class="cf b">${esc(p.name)}</span>  <span class="cy">★ ${p.stars}</span>`);
+    line(`     <span class="cd">${esc(p.desc)}</span>`);
+    line(`     <span class="${lc}">⬤</span> <span class="dim">${esc(p.lang)}</span>  <span class="cd">${esc(p.tech)}</span>`);
+    blank();
+  }
+}
+
+function cmdExperience() {
+  blank();
+  line(`<span class="cp b">Experience</span>  <span class="cd">// work history</span>`);
+  blank();
+
+  const jobs = [
+    {
+      role: 'Full Stack Developer Intern', company: 'Tech Startup (EBF)',
+      period: '2024 — Present',
+      items: [
+        'Built full-stack budgeting platform serving 500+ enterprise users',
+        'Reduced API response time by 40% using Go concurrency patterns',
+        'Implemented real-time analytics dashboard with WebSocket + React',
+      ]
+    },
+    {
+      role: 'Open Source Contributor', company: 'Various Projects',
+      period: '2023 — Present',
+      items: [
+        'Contributed to 10+ repositories across TypeScript, Go, Python',
+        'Maintained DevTrack CLI — 200+ GitHub stars, 50+ forks',
+        'Authored technical posts on Go concurrency & WebGL',
+      ]
+    },
+    {
+      role: 'Freelance Developer', company: 'Self-Employed',
+      period: '2022 — 2024',
+      items: [
+        'Delivered 8 client projects: e-commerce, portfolios, dashboards',
+        'Stack: Next.js · Node.js · MongoDB · Stripe',
+        'Maintained 100% client satisfaction rating',
+      ]
+    },
+  ];
+
+  for (const j of jobs) {
+    line(`<span class="cc b">${esc(j.role)}</span>  <span class="cd">@ ${esc(j.company)}</span>`);
+    line(`<span class="cd">  ${esc(j.period)}</span>`);
+    for (const b of j.items) line(`  <span class="cp">▸</span> <span class="cd">${esc(b)}</span>`);
+    blank();
+  }
+}
+
+function cmdContact() {
+  blank();
+  line(`<span class="cp b">Contact</span>  <span class="cd">// let's build something together</span>`);
+  blank();
+  line(`  <span class="cc">Email    </span>  <a class="tlink" href="mailto:dharmik@example.com">dharmik@example.com</a>`);
+  line(`  <span class="cg">GitHub   </span>  <a class="tlink" href="https://github.com/dharmikdholariya" target="_blank">github.com/dharmikdholariya</a>`);
+  line(`  <span class="cp">LinkedIn </span>  <a class="tlink" href="#" target="_blank">linkedin.com/in/dharmikdholariya</a>`);
+  line(`  <span class="cy">Twitter  </span>  <a class="tlink" href="#" target="_blank">@dharmikdholariya</a>`);
+  blank();
+  line(`  <span class="cd">// I respond within 24 hours ⚡</span>`);
+  blank();
+}
+
+function cmdResume() {
+  blank();
+  line(`<span class="cg">▸</span> Opening resume...`);
+  setTimeout(() => {
+    line(`<span class="cd">  → </span><a class="tlink" href="#">dharmik_dholariya_resume.pdf</a>`);
+    blank();
+  }, 600);
+}
+
+function cmdClear() { body.innerHTML = ''; }
+
+function cmdPortfolio() {
+  blank();
+  line(`<span class="cg">▸</span> Returning to portfolio...`);
+  setTimeout(() => window.location.href = 'index.html', 700);
+}
+
+function cmdLs(args = []) {
+  const dir = args[0] || currentDir;
+  const dirs = {
+    '~':           ['projects/', 'skills/', 'experience/', 'contact/', 'resume.pdf', '.zshrc', '.vimrc', 'README.md'],
+    'projects/':   ['ebf-platform/', 'ai-resume-builder/', 'devtrack-cli/', '3d-portfolio/', 'neuro-notes/', 'README.md'],
+    'skills/':     ['frontend.md', 'backend.md', 'ml-ai.md', 'devops.md'],
+    'experience/': ['internship.md', 'freelance.md', 'open-source.md'],
+  };
+  const entries = dirs[dir] || dirs['~'];
+  blank();
+  line(`<span class="cd">total ${entries.length}  —  ${esc(dir)}</span>`);
+  for (const e of entries) {
+    if (e.endsWith('/'))   line(`<span class="cc b">${esc(e)}</span>`);
+    else if (e.endsWith('.pdf')) line(`<span class="cr">${esc(e)}</span>`);
+    else if (e.startsWith('.'))  line(`<span class="cd">${esc(e)}</span>`);
+    else                         line(`<span class="cf">${esc(e)}</span>`);
+  }
+  blank();
+}
+
+function cmdCat(args = []) {
+  const file = args[0];
+  blank();
+  if (!file) {
+    line(`<span class="cr">cat: missing operand</span>`);
+    line(`<span class="cd">Usage: cat [file]   e.g. cat README.md</span>`);
+    blank();
+    return;
+  }
+  const files = {
+    'README.md': [
+      `<span class="cp b"># Dharmik Dholariya — Portfolio</span>`,
+      ``,
+      `<span class="cd">Full Stack Developer · Open Source · CS Student</span>`,
+      ``,
+      `<span class="cc">## Quick Start</span>`,
+      `Type <span class="cp">help</span> in this terminal for all commands.`,
+      `Visit <span class="cc">index.html</span> for the full 3D portfolio.`,
+      ``,
+      `<span class="cc">## Stack</span>`,
+      `React · Go · TypeScript · Python · Three.js`,
+    ],
+    '.zshrc': [
+      `<span class="cd"># .zshrc — Dharmik's shell config</span>`,
+      `<span class="cg">alias</span> gs=<span class="cy">"git status"</span>`,
+      `<span class="cg">alias</span> gc=<span class="cy">"git commit -m"</span>`,
+      `<span class="cg">alias</span> dev=<span class="cy">"npm run dev"</span>`,
+      `<span class="cg">alias</span> venv=<span class="cy">"source .venv/bin/activate"</span>`,
+      `<span class="cg">export</span> <span class="cp">EDITOR</span>=<span class="cy">"nvim"</span>`,
+      `<span class="cg">export</span> <span class="cp">GOPATH</span>=<span class="cy">"$HOME/go"</span>`,
+      `<span class="cd"># life is good ✓</span>`,
+    ],
+    '.vimrc': [
+      `<span class="cd">" .vimrc</span>`,
+      `<span class="cg">set</span> number relativenumber`,
+      `<span class="cg">set</span> expandtab tabstop=2 shiftwidth=2`,
+      `<span class="cg">colorscheme</span> <span class="cy">dracula</span>`,
+      `<span class="cd">" jk to escape</span>`,
+      `<span class="cg">inoremap</span> jk &lt;Esc&gt;`,
+    ],
+    'frontend.md': [
+      `<span class="cc b">## Frontend</span>`,
+      `React / Next.js   ${bar(90, 20, 'cc')}  90%`,
+      `TypeScript        ${bar(88, 20, 'cc')}  88%`,
+      `Tailwind CSS      ${bar(85, 20, 'cc')}  85%`,
+      `Three.js / WebGL  ${bar(72, 20, 'cc')}  72%`,
+    ],
+  };
+
+  const content = files[file];
+  if (content) {
+    for (const l of content) line(l || '');
+  } else {
+    line(`<span class="cr">cat: ${esc(file)}: No such file or directory</span>`);
+  }
+  blank();
+}
+
+function cmdCd(args = []) {
+  const dir = args[0] || '~';
+  const valid = ['~', 'projects/', 'skills/', 'experience/', '..'];
+  if (valid.includes(dir)) {
+    currentDir = dir === '..' ? '~' : dir;
+    pLabel.textContent = prompt();
+    tcTitle.textContent = `dharmik@portfolio:${currentDir} — zsh`;
+  } else {
+    line(`<span class="cr">cd: ${esc(dir)}: No such directory</span>`);
+  }
+}
+
+function cmdPwd() {
+  const full = currentDir === '~' ? '/home/dharmik' : `/home/dharmik/${currentDir.replace('/','') }`;
+  line(`<span class="cf">${full}</span>`);
+}
+
+function cmdGit(args = []) {
+  const sub = args[0] || '';
+  blank();
+  if (sub === 'log') {
+    const commits = [
+      ['a3f2d1b', 'feat: add dracula 3D terminal page'],
+      ['8e4d74e', 'feat: add GitHub fork count to projects'],
+      ['49b026a', 'style: responsive resume section'],
+      ['e94083e', 'chore: cleanup canvas background animation'],
+      ['f0e9ef4', 'feat: achievements section'],
+      ['3c1b9a2', 'fix: skill bar animation timing'],
+      ['7d4e8f1', 'feat: scroll-driven CatmullRom camera'],
+      ['2a9c3d4', 'perf: wave grid update every 2nd frame'],
+      ['b5f1e7a', 'feat: holographic sphere GLSL shader'],
+      ['1c8d2f3', 'init: portfolio.github.io'],
+    ];
+    line(`<span class="cd">commit log  (HEAD → </span><span class="cp">master</span><span class="cd">, origin/master)</span>`);
+    blank();
+    for (const [h, m] of commits) line(`<span class="cy">${h}</span> <span class="cf">${esc(m)}</span>`);
+  } else if (sub === 'status') {
+    line(`<span class="cd">On branch </span><span class="cp">master</span>`);
+    line(`<span class="cd">Your branch is up to date with </span><span class="co">origin/master</span>`);
+    blank();
+    line(`<span class="cg">nothing to commit, working tree clean ✓</span>`);
+  } else if (sub === 'branch') {
+    line(`<span class="cg">* master</span>`);
+    line(`  dev`);
+    line(`  feature/terminal-page`);
+  } else if (sub === 'diff') {
+    line(`<span class="cd">// No unstaged changes. Clean slate.</span>`);
+  } else {
+    line(`<span class="cd">Available: git log · git status · git branch · git diff</span>`);
+  }
+  blank();
+}
+
+async function cmdScan(args = []) {
+  const target = args[0] || 'dharmik.dev';
+  lock();
+  blank();
+  line(`<span class="cg">Starting port scan on </span><span class="cc">${esc(target)}</span><span class="cg"> ...</span>`);
+  blank();
+
+  const ports = [
+    { p: 22,   s: 'ssh',   st: 'open',   color: 'cg' },
+    { p: 80,   s: 'http',  st: 'open',   color: 'cg' },
+    { p: 443,  s: 'https', st: 'open',   color: 'cg' },
+    { p: 3000, s: 'dev',   st: 'open',   color: 'cg' },
+    { p: 5432, s: 'psql',  st: 'closed', color: 'cr' },
+    { p: 6379, s: 'redis', st: 'closed', color: 'cr' },
+    { p: 8080, s: 'api',   st: 'open',   color: 'cg' },
+  ];
+
+  for (const { p, s, st, color } of ports) {
+    await sleep(180 + Math.random() * 140);
+    const pStr  = String(p).padEnd(6);
+    const stStr = st.padEnd(7);
+    line(`  <span class="cd">${pStr}</span> <span class="${color}">${stStr}</span> <span class="dim">${s}</span>`);
+  }
+
+  blank();
+  line(`<span class="cg">Scan complete.</span>  <span class="cd">4 open · 2 closed</span>`);
+  blank();
+  unlock();
+}
+
+async function cmdPing(args = []) {
+  const host = args[0] || 'dharmik.dev';
+  lock();
+  blank();
+  line(`<span class="cf">PING ${esc(host)}: 56 data bytes</span>`);
+  blank();
+
+  for (let i = 0; i < 4; i++) {
+    await sleep(700 + Math.random() * 300);
+    const ms = (8 + Math.random() * 12).toFixed(3);
+    line(`<span class="cd">64 bytes from ${esc(host)}: icmp_seq=${i} ttl=55 time=</span><span class="cg">${ms} ms</span>`);
+  }
+  blank();
+  line(`<span class="cd">--- ${esc(host)} ping statistics ---</span>`);
+  line(`<span class="cf">4 packets transmitted, 4 received, 0% packet loss</span>`);
+  blank();
+  unlock();
+}
+
+function cmdDate() {
+  const now = new Date();
+  line(`<span class="cc">${now.toDateString()}</span>  <span class="cd">${now.toTimeString().split(' ')[0]}</span>  <span class="dim">UTC${now.toString().match(/GMT([+-]\d{4})/)?.[1] || ''}</span>`);
+}
+
+function cmdUptime() {
+  const days = Math.floor((Date.now() - new Date('2024-01-01').getTime()) / 86400000);
+  line(`<span class="cg">up ${days} days</span><span class="cd">, 1 user, load average: 0.01 0.01 0.00</span>`);
+  line(`<span class="cd">// Always on. Always building.</span>`);
+}
+
+function cmdSudo() {
+  blank();
+  line(`<span class="cr">[sudo] password for dharmik:</span>`);
+  setTimeout(() => {
+    line(`<span class="cr">sudo: nice try. 😄</span>`);
+    line(`<span class="cd">This incident has been reported.</span>`);
+    blank();
+  }, 600);
+}
+
+function cmdEcho(args = []) {
+  line(esc(args.join(' ')));
+}
+
+function cmdExit() {
+  blank();
+  line(`<span class="cd">logout</span>`);
+  line(`<span class="cp">Saved session → ~/terminal_history</span>`);
+  blank();
+  setTimeout(() => window.location.href = 'index.html', 900);
+}
+
+/* ── Matrix Easter Egg ── */
+async function cmdMatrix() {
+  const matCanvas = document.getElementById('matrixCanvas');
+  matCanvas.style.display = 'block';
+  matCanvas.width  = body.offsetWidth  || 840;
+  matCanvas.height = body.offsetHeight || 520;
+  const ctx = matCanvas.getContext('2d');
+
+  matrixActive = true;
+  lock();
+  blank();
+  line(`<span class="cg">Initializing Matrix protocol...</span>`);
+  await sleep(500);
+
+  const cols  = Math.floor(matCanvas.width / 14);
+  const drops = Array.from({ length: cols }, () => Math.random() * -50);
+  const chars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモ01アBCDEF';
+
+  let frame = 0;
+  const iv = setInterval(() => {
+    ctx.fillStyle = 'rgba(25,26,33,0.14)';
+    ctx.fillRect(0, 0, matCanvas.width, matCanvas.height);
+
+    for (let i = 0; i < drops.length; i++) {
+      const ch = chars[Math.floor(Math.random() * chars.length)];
+      const x  = i * 14;
+      const y  = drops[i] * 14;
+
+      // Leading char — bright white
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = '#50FA7B';
+      ctx.shadowBlur  = 8;
+      ctx.font = 'bold 13px "JetBrains Mono", monospace';
+      ctx.fillText(ch, x, y);
+
+      // Trail chars — green
+      ctx.fillStyle  = `rgba(80,250,123,${0.3 + Math.random() * 0.5})`;
+      ctx.shadowBlur = 0;
+      ctx.font = '12px "JetBrains Mono", monospace';
+      ctx.fillText(chars[Math.floor(Math.random() * chars.length)], x, y - 14);
+      ctx.fillText(chars[Math.floor(Math.random() * chars.length)], x, y - 28);
+
+      if (drops[i] * 14 > matCanvas.height && Math.random() > 0.975) {
+        drops[i] = 0;
+      }
+      drops[i] += 0.5 + Math.random() * 0.4;
+    }
+
+    frame++;
+    if (frame > 200) {
+      clearInterval(iv);
+      ctx.clearRect(0, 0, matCanvas.width, matCanvas.height);
+      matCanvas.style.display = 'none';
+      blank();
+      line(`<span class="cg b">Wake up, Dharmik... The Matrix has you.</span>`);
+      line(`<span class="cd">// Type 'clear' to continue</span>`);
+      blank();
+      matrixActive = false;
+      unlock();
+    }
+  }, 45);
+}
+
+/* ── Hack Easter Egg ── */
+async function cmdHack() {
+  lock();
+  const termEl = document.getElementById('terminal');
+  blank();
+  line(`<span class="cr b">▌ BREACH SEQUENCE INITIALIZED ▐</span>`);
+  await sleep(300);
+
+  const steps = [
+    [250, `<span class="cd">[</span><span class="cg">✓</span><span class="cd">]</span> Bypassing firewall...`],
+    [380, `<span class="cd">[</span><span class="cg">✓</span><span class="cd">]</span> Spoofing MAC: <span class="cc">DE:AD:BE:EF:CA:FE</span>`],
+    [300, `<span class="cd">[</span><span class="cg">✓</span><span class="cd">]</span> Injecting payload... <span class="cy">'; DROP TABLE users; --</span>`],
+    [450, `<span class="cd">[</span><span class="cg">✓</span><span class="cd">]</span> Routing through <span class="cp">7 proxies</span>...`],
+    [350, `<span class="cd">[</span><span class="cg">✓</span><span class="cd">]</span> Downloading the mainframe...`],
+    [500, `<span class="cd">[</span><span class="cg">✓</span><span class="cd">]</span> Hacking the Gibson...`],
+    [400, `<span class="cd">[</span><span class="cg">✓</span><span class="cd">]</span> Reversing the polarity of the neutron flow...`],
+    [600, `<span class="cd">[</span><span class="cg">✓</span><span class="cd">]</span> Mining 1 BTC... <span class="dim">(this may take ~10 years)</span>`],
+    [800, `<span class="cg b">ACCESS GRANTED  ████████████████████ 100%</span>`],
+  ];
+
+  for (const [delay, msg] of steps) {
+    await sleep(delay);
+    line(msg);
+  }
+
+  await sleep(500);
+  termEl.classList.add('glitching');
+  await sleep(700);
+  termEl.classList.remove('glitching');
+
+  blank();
+  line(`<span class="cp b">  ██╗     ██╗███╗   ███╗</span>`);
+  line(`<span class="cp b">  ██║     ██║████╗ ████║</span>`);
+  line(`<span class="cp b">  ██║     ██║██╔████╔██║</span>`);
+  line(`<span class="cp b">  ██║     ██║██║╚██╔╝██║</span>`);
+  line(`<span class="cp b">  ███████╗██║██║ ╚═╝ ██║</span>  <span class="cd">// just kidding 😄</span>`);
+  line(`<span class="cp b">  ╚══════╝╚═╝╚═╝     ╚═╝</span>`);
+  blank();
+  line(`<span class="cd">// No actual hacking was performed. This is a portfolio, not a cyber weapon.</span>`);
+  blank();
+  unlock();
+}
+
+/* ── Command map ── */
+const CMDS = {
+  help: cmdHelp, whoami: cmdWhoami, neofetch: cmdNeofetch,
+  skills: cmdSkills, projects: cmdProjects, experience: cmdExperience,
+  contact: cmdContact, resume: cmdResume, clear: cmdClear,
+  portfolio: cmdPortfolio, ls: cmdLs, cat: cmdCat,
+  cd: cmdCd, pwd: cmdPwd, git: cmdGit,
+  scan: cmdScan, ping: cmdPing,
+  date: cmdDate, uptime: cmdUptime,
+  sudo: cmdSudo, echo: cmdEcho,
+  matrix: cmdMatrix, hack: cmdHack,
+  exit: cmdExit,
+  // Aliases
+  'ls -la': cmdLs, 'git log': (a=[]) => cmdGit(['log', ...a]),
+  'git status': () => cmdGit(['status']),
+  clear: cmdClear, cls: cmdClear,
+};
+
+/* ── Run command ── */
+async function runCommand(raw) {
+  const parts = raw.trim().split(/\s+/);
+  const cmd   = parts[0].toLowerCase();
+  const args  = parts.slice(1);
+
+  cmdLine(raw);
+  if (!cmd) return;
+
+  // Special multi-word commands
+  const twoWord = `${cmd} ${(args[0]||'').toLowerCase()}`;
+  const fn = CMDS[twoWord] || CMDS[cmd];
+
+  if (fn) {
+    await fn(args);
+  } else {
+    blank();
+    line(`<span class="cr">${esc(cmd)}: command not found</span>  <span class="cd">— type 'help' for commands</span>`);
+    blank();
+  }
+}
+
+/* ── Input events ── */
+inputEl.addEventListener('keydown', async e => {
+  if (locked) return;
+
+  if (e.key === 'Enter') {
+    const val = inputEl.value;
+    inputEl.value = '';
+    histIdx = -1;
+    if (val.trim()) cmdHistory.unshift(val.trim());
+    await runCommand(val);
+    return;
+  }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (histIdx < cmdHistory.length - 1) histIdx++;
+    inputEl.value = cmdHistory[histIdx] || '';
+    setTimeout(() => { inputEl.selectionStart = inputEl.selectionEnd = inputEl.value.length; }, 0);
+    return;
+  }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (histIdx > 0) histIdx--;
+    else { histIdx = -1; inputEl.value = ''; return; }
+    inputEl.value = cmdHistory[histIdx] || '';
+    return;
+  }
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const val = inputEl.value.toLowerCase().trim();
+    if (!val) return;
+    const match = Object.keys(CMDS).find(c => c.startsWith(val) && c !== val && !c.includes(' '));
+    if (match) inputEl.value = match;
+    return;
+  }
+  if (e.key === 'l' && e.ctrlKey) {
+    e.preventDefault();
+    cmdClear();
+    return;
+  }
+  if (e.key === 'c' && e.ctrlKey) {
+    e.preventDefault();
+    blank();
+    line(`<span class="cr">^C</span>`);
+    blank();
+    inputEl.value = '';
+    return;
+  }
+});
+
+document.addEventListener('click', () => { if (!locked) inputEl.focus(); });
+
+/* ── Traffic-light dot clicks ── */
+document.getElementById('btnClose').addEventListener('click', () => {
+  window.location.href = 'index.html';
+});
+document.getElementById('btnMin').addEventListener('click', () => {
+  const b = document.getElementById('termBody');
+  b.style.display = b.style.display === 'none' ? '' : 'none';
+});
+document.getElementById('btnMax').addEventListener('click', () => {
+  const w = document.getElementById('termWrap');
+  const isMax = w.style.width === '100vw';
+  w.style.width     = isMax ? '' : '100vw';
+  w.style.maxWidth  = isMax ? '' : '100vw';
+});
+
+
+/* ═══════════════════════════════════════════════════════════
+   BOOT SEQUENCE
+═══════════════════════════════════════════════════════════ */
+async function boot() {
+  lock();
+  await sleep(350);
+
+  /* ASCII banner */
+  const banner = [
+    ` ██████╗ ██╗  ██╗ █████╗ ██████╗ ███╗   ███╗██╗██╗  ██╗`,
+    ` ██╔══██╗██║  ██║██╔══██╗██╔══██╗████╗ ████║██║██║ ██╔╝`,
+    ` ██║  ██║███████║███████║██████╔╝██╔████╔██║██║█████╔╝ `,
+    ` ██║  ██║██╔══██║██╔══██║██╔══██╗██║╚██╔╝██║██║██╔═██╗ `,
+    ` ██████╔╝██║  ██║██║  ██║██║  ██║██║ ╚═╝ ██║██║██║  ██╗`,
+    ` ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═╝`,
+  ];
+
+  for (const l of banner) {
+    line(`<span class="ascii">${esc(l)}</span>`);
+    await sleep(38);
+  }
+
+  await sleep(150);
+  blank();
+  line(`<span class="cd">  ──────────────────────────────────────────────────────────</span>`);
+  line(`  <span class="cp">Full Stack Developer</span>  <span class="cd">·</span>  <span class="cc">Open Source</span>  <span class="cd">·</span>  <span class="cg">CS Student</span>  <span class="cd">·</span>  <span class="cy">India 🇮🇳</span>`);
+  line(`<span class="cd">  ──────────────────────────────────────────────────────────</span>`);
+  blank();
+  await sleep(250);
+
+  /* Auto-type: whoami */
+  const w1 = document.createElement('p');
+  w1.className = 'out-line out-cmd';
+  w1.innerHTML = `<span class="out-prompt">${esc(prompt())}</span><span class="out-cmd-text" id="t1"></span>`;
+  body.appendChild(w1);
+  await typewrite($('t1'), 'whoami', 50);
+  await sleep(380);
+
+  line(`<span class="cp b">Dharmik Dholariya</span>  <span class="cd">// Full Stack Developer & CS Student</span>`);
+  blank();
+  line(`  <span class="cd">Building at the intersection of</span> <span class="cc">design</span> <span class="cd">+</span> <span class="cg">engineering</span>`);
+  line(`  <span class="cc">React</span> <span class="cd">·</span> <span class="cg">Go</span> <span class="cd">·</span> <span class="cy">TypeScript</span> <span class="cd">·</span> <span class="cpk">Python</span> <span class="cd">·</span> <span class="cp">Three.js</span>`);
+  blank();
+  line(`  <span class="cd">Status  </span> <span class="cg">● Open to opportunities</span>`);
+  blank();
+  await sleep(450);
+
+  /* Auto-type: neofetch */
+  const w2 = document.createElement('p');
+  w2.className = 'out-line out-cmd';
+  w2.innerHTML = `<span class="out-prompt">${esc(prompt())}</span><span class="out-cmd-text" id="t2"></span>`;
+  body.appendChild(w2);
+  await typewrite($('t2'), 'neofetch', 50);
+  await sleep(350);
+  cmdNeofetch();
+  await sleep(400);
+
+  /* Auto-type: git log */
+  const w3 = document.createElement('p');
+  w3.className = 'out-line out-cmd';
+  w3.innerHTML = `<span class="out-prompt">${esc(prompt())}</span><span class="out-cmd-text" id="t3"></span>`;
+  body.appendChild(w3);
+  await typewrite($('t3'), 'git log --oneline -5', 42);
+  await sleep(350);
+  blank();
+  const recent = [
+    ['a3f2d1b', 'feat: add dracula 3D terminal page'],
+    ['8e4d74e', 'feat: github fork count on projects'],
+    ['49b026a', 'style: responsive resume section'],
+    ['e94083e', 'chore: cleanup canvas background'],
+    ['f0e9ef4', 'feat: achievements section'],
+  ];
+  for (const [h, m] of recent) {
+    line(`<span class="cy">${h}</span> <span class="cf">${esc(m)}</span>`);
+    await sleep(55);
+  }
+  blank();
+
+  /* Ready */
+  await sleep(400);
+  line(`<span class="cg">▸</span> <span class="cf">Terminal ready.</span>  Type <span class="cp b">help</span> <span class="cd">to see all commands.</span>`);
+  blank();
+
+  unlock();
+  scrollBot();
+}
+
+boot();
+</script>
+</body>
+</html>
