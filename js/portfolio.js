@@ -483,6 +483,187 @@ const $$ = (s, c = document) => [...c.querySelectorAll(s)];
     new THREE.Vector3( 0,  -240,  0),
   ]);
 
+  /* ═══════════════════════════════════════════════════
+     13. COMETS — fast particles with glowing trails
+  ═══════════════════════════════════════════════════ */
+  const COMETS = [];
+  {
+    function mkComet(idx) {
+      const color = idx % 2 === 0 ? 0xFF2060 : 0x00CCFF;
+      const TAIL  = 16;
+      const tBuf  = new Float32Array(TAIL * 3);
+      const tGeo  = new THREE.BufferGeometry();
+      tGeo.setAttribute('position', new THREE.BufferAttribute(tBuf, 3));
+      tGeo.setDrawRange(0, 0);
+      scene.add(new THREE.Line(tGeo, new THREE.LineBasicMaterial({
+        color, transparent: true, opacity: .55, blending: THREE.AdditiveBlending,
+      })));
+      const head = new THREE.Mesh(
+        new THREE.SphereGeometry(.075, 6, 6),
+        new THREE.MeshBasicMaterial({ color, blending: THREE.AdditiveBlending, transparent: true }),
+      );
+      scene.add(head);
+      const ang = Math.random() * Math.PI * 2;
+      return {
+        head, tGeo, tBuf, TAIL, hist: [],
+        pos: new THREE.Vector3((Math.random() - .5) * 40, (Math.random() - .5) * 40, (Math.random() - .5) * 6),
+        dir: new THREE.Vector3(Math.cos(ang), Math.sin(ang) * .65, 0).normalize(),
+        spd: .08 + Math.random() * .10,
+      };
+    }
+    for (let i = 0; i < 7; i++) COMETS.push(mkComet(i));
+  }
+
+  /* ═══════════════════════════════════════════════════
+     14. CONSTELLATION LINES — breathing star-connect
+  ═══════════════════════════════════════════════════ */
+  const CONST_LINES = [];
+  {
+    for (let i = 0; i < 30; i++) {
+      const x1  = (Math.random() - .5) * 80;
+      const y1  = (Math.random() - .5) * 120;
+      const z1  = (Math.random() - .5) * 12;
+      const len = 3 + Math.random() * 10;
+      const ang = Math.random() * Math.PI * 2;
+      const geo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(x1, y1, z1),
+        new THREE.Vector3(x1 + Math.cos(ang) * len, y1 + Math.sin(ang) * len * .5, z1),
+      ]);
+      const mat = new THREE.LineBasicMaterial({
+        color: i % 3 === 2 ? 0x40D8FF : 0xFF5585,
+        transparent: true, opacity: 0, blending: THREE.AdditiveBlending,
+      });
+      scene.add(new THREE.Line(geo, mat));
+      CONST_LINES.push({ mat, ph: Math.random() * Math.PI * 2, fr: .2 + Math.random() * .35 });
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════
+     15. BLACK HOLE LENSING RING  (Contact  Y ≈ -240)
+  ═══════════════════════════════════════════════════ */
+  let bhRingMesh;
+  const BH_N = 300;
+  const bhBuf = new Float32Array(BH_N * 3);
+  const bhGeo = new THREE.BufferGeometry();
+  {
+    const ringPts = [];
+    for (let i = 0; i <= 160; i++) {
+      const a = (i / 160) * Math.PI * 2;
+      ringPts.push(new THREE.Vector3(Math.cos(a) * 2.8, Math.sin(a) * 2.8 * .28, 0));
+    }
+    bhRingMesh = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(ringPts),
+      new THREE.LineBasicMaterial({ color: 0xFF2060, transparent: true, opacity: .6, blending: THREE.AdditiveBlending })
+    );
+    bhRingMesh.position.set(0, -240, -1);
+    scene.add(bhRingMesh);
+    bhGeo.setAttribute('position', new THREE.BufferAttribute(bhBuf, 3));
+    const bhMesh = new THREE.Points(bhGeo, new THREE.PointsMaterial({
+      size: .065, map: SPR_ROSE, transparent: true, depthWrite: false,
+      blending: THREE.AdditiveBlending, opacity: .8,
+    }));
+    bhMesh.position.set(0, -240, -1);
+    scene.add(bhMesh);
+  }
+
+  /* ═══════════════════════════════════════════════════
+     16. MORPHING ICOSAHEDRON  (Skills  Y ≈ -80)
+  ═══════════════════════════════════════════════════ */
+  let morphMesh, morphU;
+  {
+    morphU = { uTime: { value: 0 } };
+    morphMesh = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(1.2, 4),
+      new THREE.ShaderMaterial({
+        uniforms: morphU,
+        vertexShader: `
+          uniform float uTime;
+          varying vec3 vN;
+          void main() {
+            vN = normalize(normalMatrix * normal);
+            vec3 p = position;
+            p += normal * (sin(p.x*4.0+uTime)*sin(p.y*4.0+uTime*1.3)*sin(p.z*4.0+uTime*.9)*0.2);
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+          }
+        `,
+        fragmentShader: `
+          varying vec3 vN;
+          uniform float uTime;
+          void main() {
+            float fres = pow(1.0 - abs(dot(vN, normalize(vec3(0.0,0.0,1.0)))), 2.0);
+            vec3 col = mix(vec3(0.0,0.78,1.0), vec3(1.0,0.13,0.38), fres);
+            gl_FragColor = vec4(col, fres * .65 + .04);
+          }
+        `,
+        transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+      })
+    );
+    morphMesh.position.set(-3.8, -80, -1);
+    scene.add(morphMesh);
+  }
+
+  /* ═══════════════════════════════════════════════════
+     17. AUDIO-REACTIVE BARS RING  (hero sphere)
+  ═══════════════════════════════════════════════════ */
+  const audioBars = [];
+  {
+    const N_BARS = 48, RING_R = 5.5;
+    for (let i = 0; i < N_BARS; i++) {
+      const ang = (i / N_BARS) * Math.PI * 2;
+      const bar = new THREE.Mesh(
+        new THREE.BoxGeometry(.07, .3, .07),
+        new THREE.MeshBasicMaterial({
+          color: i % 2 === 0 ? 0xFF2060 : 0x00CCFF,
+          transparent: true, opacity: .65, blending: THREE.AdditiveBlending,
+        })
+      );
+      bar.position.set(Math.cos(ang) * RING_R + 1.8, 0, Math.sin(ang) * RING_R);
+      bar.rotation.z = -ang;
+      bar.userData = { phase: i * .13 };
+      scene.add(bar);
+      audioBars.push(bar);
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════
+     18. SECTION TRANSITION BURST
+  ═══════════════════════════════════════════════════ */
+  let burstActive = false, burstT = 0;
+  const BURST_N = 120;
+  const burstPosBuf = new Float32Array(BURST_N * 3);
+  const burstOriginV = new THREE.Vector3();
+  const burstVelArr  = [];
+  let burstGeo3D, burstMat3D;
+  {
+    burstGeo3D = new THREE.BufferGeometry();
+    burstGeo3D.setAttribute('position', new THREE.BufferAttribute(burstPosBuf, 3));
+    burstGeo3D.setDrawRange(0, 0);
+    burstMat3D = new THREE.PointsMaterial({
+      size: .22, map: SPR_ROSE, transparent: true,
+      depthWrite: false, blending: THREE.AdditiveBlending,
+    });
+    scene.add(new THREE.Points(burstGeo3D, burstMat3D));
+    for (let i = 0; i < BURST_N; i++) {
+      const phi = Math.acos(2 * Math.random() - 1);
+      const th  = Math.random() * Math.PI * 2;
+      burstVelArr.push(new THREE.Vector3(
+        Math.sin(phi) * Math.cos(th) * (.6 + Math.random()),
+        Math.sin(phi) * Math.sin(th) * (.6 + Math.random()),
+        Math.cos(phi) * (.3 + Math.random() * .5)
+      ));
+    }
+    window.__burst3D = function(camY) {
+      burstOriginV.set(0, camY, 4);
+      for (let i = 0; i < BURST_N; i++) {
+        burstPosBuf[i*3]=0; burstPosBuf[i*3+1]=camY; burstPosBuf[i*3+2]=4;
+      }
+      burstGeo3D.setDrawRange(0, BURST_N);
+      burstGeo3D.attributes.position.needsUpdate = true;
+      burstMat3D.opacity = .9;
+      burstActive = true; burstT = 0;
+    };
+  }
+
   /* ── Mouse + Scroll State ── */
   let mX = 0, mY = 0;
   let camT = 0, targetCamT = 0;
@@ -597,6 +778,65 @@ const $$ = (s, c = document) => [...c.querySelectorAll(s)];
         warpPos[i*6+5] = camera.position.z + sz * far - 3;
       }
       warpLines.geometry.attributes.position.needsUpdate = true;
+    }
+
+    /* Comets */
+    COMETS.forEach(c => {
+      c.pos.addScaledVector(c.dir, c.spd);
+      c.head.position.copy(c.pos);
+      c.hist.unshift(c.pos.clone());
+      if (c.hist.length > c.TAIL) c.hist.pop();
+      if (c.pos.length() > 58) {
+        const a = Math.random() * Math.PI * 2;
+        c.pos.set((Math.random() - .5) * 30, (Math.random() - .5) * 30, (Math.random() - .5) * 5);
+        c.dir.set(Math.cos(a), Math.sin(a) * .65, 0).normalize();
+        c.hist = [];
+      }
+      const n = c.hist.length;
+      for (let j = 0; j < n; j++) {
+        c.tBuf[j*3] = c.hist[j].x; c.tBuf[j*3+1] = c.hist[j].y; c.tBuf[j*3+2] = c.hist[j].z;
+      }
+      c.tGeo.setDrawRange(0, n);
+      c.tGeo.attributes.position.needsUpdate = true;
+    });
+
+    /* Constellation breathe */
+    CONST_LINES.forEach(c => { c.mat.opacity = (.5 + .5 * Math.sin(t * c.fr + c.ph)) * .13; });
+
+    /* Black hole lensing */
+    bhRingMesh.rotation.z = t * .22;
+    for (let i = 0; i < BH_N; i++) {
+      const ang = (i / BH_N) * Math.PI * 2 + t * .85;
+      const r   = 2.5 - ((t * .08 + i * .01) % 2.5);
+      bhBuf[i*3]   = Math.cos(ang) * r;
+      bhBuf[i*3+1] = Math.sin(ang) * r * .28;
+      bhBuf[i*3+2] = 0;
+    }
+    bhGeo.attributes.position.needsUpdate = true;
+
+    /* Morphing icosahedron */
+    morphU.uTime.value = t;
+    morphMesh.rotation.y = t * .16;
+    morphMesh.rotation.x = t * .09;
+
+    /* Audio bars */
+    audioBars.forEach(b => {
+      const h = .3 + .9 * Math.abs(Math.sin(t * 3.8 + b.userData.phase));
+      b.scale.y = h / .3;
+      b.material.opacity = .3 + h * .5;
+    });
+
+    /* Section burst */
+    if (burstActive) {
+      burstT += .04;
+      for (let i = 0; i < BURST_N; i++) {
+        burstPosBuf[i*3]   = burstOriginV.x + burstVelArr[i].x * burstT;
+        burstPosBuf[i*3+1] = burstOriginV.y + burstVelArr[i].y * burstT;
+        burstPosBuf[i*3+2] = burstOriginV.z + burstVelArr[i].z * burstT;
+      }
+      burstGeo3D.attributes.position.needsUpdate = true;
+      burstMat3D.opacity = Math.max(0, .9 - burstT * .72);
+      if (burstT > 1.25) { burstActive = false; burstGeo3D.setDrawRange(0, 0); }
     }
 
     renderer.render(scene, camera);
@@ -756,7 +996,7 @@ $$('a[href^="#"]').forEach(a => {
       io.unobserve(el);
     });
   }, { threshold: .6 });
-  $$('.ctr').forEach(el => io.observe(el));
+  $$('.ctr-v1').forEach(el => io.observe(el)); // replaced by odometer below
 })();
 
 /* ══════════════════════════════════════════
@@ -956,4 +1196,413 @@ $$('.btn-primary,.btn-ghost,.btn-resume,.bfl-btn').forEach(btn => {
   $$('.sg-tags span').forEach((tag, i) => {
     tag.style.transitionDelay = (i % 6) * 0.04 + 's';
   });
+})();
+
+/* ══════════════════════════════════════════
+   TEXT SCRAMBLE — hero name on load
+══════════════════════════════════════════ */
+(function () {
+  const el = document.querySelector('.hero-name');
+  if (!el) return;
+  const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@$%&*?!';
+  // Wrap each line in a span to preserve the <br>
+  const lines = el.innerText.split('\n').filter(l => l.trim());
+  el.innerHTML = lines.map(l => `<span class="hn-s">${l}</span>`).join('<br>');
+  const spans = [...el.querySelectorAll('.hn-s')];
+  let frame = 0;
+  const FRAMES = 26;
+  function scramble() {
+    spans.forEach(sp => {
+      const orig = sp.dataset.orig || (sp.dataset.orig = sp.textContent);
+      sp.textContent = orig.split('').map((ch, i) => {
+        if (frame > FRAMES * (i / orig.length)) return ch;
+        return ch === '.' ? ch : CHARS[Math.floor(Math.random() * CHARS.length)];
+      }).join('');
+    });
+    if (frame++ < FRAMES) requestAnimationFrame(scramble);
+    else spans.forEach(sp => { sp.textContent = sp.dataset.orig; });
+  }
+  setTimeout(scramble, 900);
+})();
+
+/* ══════════════════════════════════════════
+   CURSOR TRAIL PARTICLES
+══════════════════════════════════════════ */
+(function () {
+  if (window.matchMedia('(max-width:768px)').matches) return;
+  const COLORS = ['#FF2060','#00CCFF','#FF5585','#C8FF00','#40D8FF'];
+  let last = 0;
+  document.addEventListener('mousemove', e => {
+    const now = Date.now();
+    if (now - last < 38) return;
+    last = now;
+    const p = document.createElement('div');
+    p.className = 'cur-trail';
+    p.style.cssText = `left:${e.clientX}px;top:${e.clientY}px;` +
+      `background:${COLORS[Math.floor(Math.random() * COLORS.length)]};` +
+      `animation-duration:${(.45 + Math.random() * .25).toFixed(2)}s`;
+    document.body.appendChild(p);
+    p.addEventListener('animationend', () => p.remove(), { once: true });
+  });
+})();
+
+/* ══════════════════════════════════════════
+   SECTION HEADING CHAR SPLIT
+══════════════════════════════════════════ */
+(function () {
+  $$('.sec-title').forEach(el => {
+    const text = el.textContent;
+    el.innerHTML = [...text].map((ch, i) =>
+      ch === ' '
+        ? '<span style="display:inline-block;width:.28em"> </span>'
+        : `<span class="s-char" style="transition-delay:${(0.03 + i * 0.038).toFixed(3)}s">${ch}</span>`
+    ).join('');
+  });
+})();
+
+/* ══════════════════════════════════════════
+   SKILL TAG CASCADE FLIP
+══════════════════════════════════════════ */
+(function () {
+  const EASE = 'cubic-bezier(.22,1,.36,1)';
+  $$('.sk-tags').forEach(row => {
+    const tags = $$('span', row);
+    tags.forEach((tag, i) => {
+      tag.style.opacity = '0';
+      tag.style.transform = 'perspective(400px) rotateX(-80deg) translateY(8px)';
+      tag.style.transition = `opacity .45s ${EASE} ${(i * .055).toFixed(3)}s, transform .45s ${EASE} ${(i * .055).toFixed(3)}s`;
+    });
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (!e.isIntersecting) return;
+        tags.forEach(tag => {
+          tag.style.opacity = '';
+          tag.style.transform = '';
+        });
+        io.unobserve(e.target);
+      });
+    }, { threshold: .18 });
+    io.observe(row);
+  });
+})();
+
+/* ══════════════════════════════════════════
+   TIMELINE SPINE DRAW-IN
+══════════════════════════════════════════ */
+(function () {
+  const spine = document.querySelector('.tl-spine');
+  const tl    = document.querySelector('.tl');
+  if (!spine || !tl) return;
+  spine.style.clipPath = 'inset(0 0 100% 0)';
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      spine.style.clipPath = 'inset(0 0 0% 0)';
+      io.unobserve(e.target);
+    });
+  }, { threshold: .04 });
+  io.observe(tl);
+})();
+
+/* ══════════════════════════════════════════
+   BENTO CARD FLIP ENTRANCE
+══════════════════════════════════════════ */
+(function () {
+  const EASE  = 'cubic-bezier(.22,1,.36,1)';
+  const feat  = document.querySelector('.bento-feat');
+  const cards = $$('.bc');
+
+  function prep(el, delay) {
+    el.style.opacity   = '0';
+    el.style.transform = 'perspective(700px) rotateX(22deg) translateY(30px)';
+    el.style.transition = `opacity .65s ${EASE} ${delay.toFixed(2)}s, transform .65s ${EASE} ${delay.toFixed(2)}s`;
+  }
+  function reveal(el) {
+    el.style.opacity   = '1';
+    el.style.transform = 'none';
+    setTimeout(() => {
+      el.style.opacity = el.style.transform = el.style.transition = '';
+    }, 720);
+  }
+
+  if (feat) prep(feat, 0);
+  cards.forEach((c, i) => prep(c, i * .1));
+
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      reveal(e.target);
+      io.unobserve(e.target);
+    });
+  }, { threshold: .08 });
+
+  if (feat) io.observe(feat);
+  cards.forEach(c => io.observe(c));
+})();
+
+/* ══════════════════════════════════════════
+   MAGNETIC BENTO CARDS
+══════════════════════════════════════════ */
+(function () {
+  $$('.bc, .bento-feat').forEach(card => {
+    card.addEventListener('mousemove', e => {
+      const r  = card.getBoundingClientRect();
+      const dx = (e.clientX - r.left - r.width  / 2) * .035;
+      const dy = (e.clientY - r.top  - r.height / 2) * .035;
+      card.style.transform = `translate(${dx.toFixed(1)}px,${dy.toFixed(1)}px)`;
+    });
+    card.addEventListener('mouseleave', () => { card.style.transform = ''; });
+  });
+})();
+
+/* ══════════════════════════════════════════
+   PAGE REVEAL WIPE
+══════════════════════════════════════════ */
+(function () {
+  const wipe = document.getElementById('pageWipe');
+  if (wipe) setTimeout(() => wipe.remove(), 1100);
+})();
+
+/* ══════════════════════════════════════════
+   FILM GRAIN CANVAS
+══════════════════════════════════════════ */
+(function () {
+  const cv = document.getElementById('filmGrain');
+  if (!cv) return;
+  const W = 256, H = 256;
+  cv.width = W; cv.height = H;
+  cv.style.cssText = 'width:100%;height:100%;position:fixed;inset:0;pointer-events:none;z-index:9999;opacity:.034;mix-blend-mode:overlay;';
+  const ctx = cv.getContext('2d');
+  function grain() {
+    const img = ctx.createImageData(W, H);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const v = Math.random() * 255 | 0;
+      img.data[i] = img.data[i+1] = img.data[i+2] = v; img.data[i+3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    requestAnimationFrame(grain);
+  }
+  grain();
+})();
+
+/* ══════════════════════════════════════════
+   HERO GLITCH EFFECT
+══════════════════════════════════════════ */
+(function () {
+  const el = document.querySelector('.hero-name');
+  if (!el) return;
+  function glitch() {
+    el.classList.add('hero-glitch');
+    setTimeout(() => el.classList.remove('hero-glitch'), 420);
+    setTimeout(glitch, 5000 + Math.random() * 4000);
+  }
+  setTimeout(glitch, 3500);
+})();
+
+/* ══════════════════════════════════════════
+   BLUR-TO-SHARP REVEAL
+══════════════════════════════════════════ */
+(function () {
+  $$('.about-body p, .ct-sub, .bf-desc, .bc-body p').forEach(el => {
+    el.classList.add('blur-reveal');
+  });
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      setTimeout(() => e.target.classList.add('in'), 100);
+      io.unobserve(e.target);
+    });
+  }, { threshold: .15 });
+  $$('.blur-reveal').forEach(el => io.observe(el));
+})();
+
+/* ══════════════════════════════════════════
+   ABOUT QUOTE TYPEWRITER
+══════════════════════════════════════════ */
+(function () {
+  const el = document.querySelector('.about-quote');
+  if (!el) return;
+  const full = el.innerText.replace(/\n/g, ' ');
+  el.textContent = '';
+  let done = false;
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (!e.isIntersecting || done) return;
+      done = true;
+      let i = 0;
+      function type() {
+        el.textContent = '"' + full.replace(/^"/, '').replace(/"$/, '').slice(0, i) + (i < full.replace(/^"/, '').replace(/"$/, '').length ? '|' : '"');
+        if (i++ <= full.length) setTimeout(type, 38);
+      }
+      type();
+      io.unobserve(e.target);
+    });
+  }, { threshold: .5 });
+  io.observe(el);
+})();
+
+/* ══════════════════════════════════════════
+   BUTTON RIPPLE
+══════════════════════════════════════════ */
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.btn-primary,.btn-ghost,.btn-resume,.bfl-btn');
+  if (!btn) return;
+  const r   = btn.getBoundingClientRect();
+  const sz  = Math.max(r.width, r.height);
+  const rpl = document.createElement('span');
+  rpl.className = 'btn-ripple';
+  rpl.style.cssText = `width:${sz}px;height:${sz}px;left:${e.clientX-r.left-sz/2}px;top:${e.clientY-r.top-sz/2}px`;
+  btn.appendChild(rpl);
+  rpl.addEventListener('animationend', () => rpl.remove(), { once: true });
+});
+
+/* ══════════════════════════════════════════
+   TIMELINE DOT PULSE
+══════════════════════════════════════════ */
+(function () {
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      const dot = e.target.querySelector('.tl-dot');
+      if (dot) { dot.classList.add('dot-active'); }
+      io.unobserve(e.target);
+    });
+  }, { threshold: .5 });
+  $$('.tl-entry').forEach(el => io.observe(el));
+})();
+
+/* ══════════════════════════════════════════
+   ACHIEVEMENT CARD FLIP
+══════════════════════════════════════════ */
+(function () {
+  const BACK_TEXT = {
+    'EthDenver Finalist':     'Impact & Public Goods track · EthDenver 2024',
+    'Runner-Up — ETHGlobal':  'Best ZK Usage for Privacy · ETHGlobal 2024',
+    'Winner — Agtech Hackathon': '1st place · 24-hour startup sprint · Jun 2023',
+    'Winner — TheKey Incubator': '1st place · 48-hour startup · SettleOut · Mar 2023',
+    'Mitacs Scholarship':     'Graduate research scholarship · U of Regina 2022',
+    'MongoDB Associate Developer': 'Certified · mongodb.com',
+    'Data Science Specialization': 'IBM · Coursera · 9-course series',
+    'Front-End Web UI — Bootstrap 4': 'Coursera certified',
+    'Applied Plotting in Python': 'Coursera · University of Michigan',
+  };
+  $$('.win-item, .cert-item').forEach(item => {
+    const title = item.querySelector('strong');
+    const key   = title ? title.textContent.trim() : '';
+    const back  = BACK_TEXT[key] || key;
+    const inner = document.createElement('div');
+    inner.className = 'ach-flip-inner';
+    const front = document.createElement('div');
+    front.className = 'ach-front';
+    while (item.firstChild) front.appendChild(item.firstChild);
+    const backDiv = document.createElement('div');
+    backDiv.className = 'ach-back';
+    backDiv.textContent = back;
+    inner.appendChild(front);
+    inner.appendChild(backDiv);
+    item.appendChild(inner);
+  });
+})();
+
+/* ══════════════════════════════════════════
+   MOUSE PROXIMITY GLOW
+══════════════════════════════════════════ */
+(function () {
+  if (window.matchMedia('(max-width:768px)').matches) return;
+  const targets = $$('.tl-card, .bento-feat, .bc, .win-item, .cert-item');
+  document.addEventListener('mousemove', e => {
+    targets.forEach(el => {
+      const r  = el.getBoundingClientRect();
+      const cx = r.left + r.width  / 2;
+      const cy = r.top  + r.height / 2;
+      const d  = Math.hypot(e.clientX - cx, e.clientY - cy);
+      const glow = Math.max(0, 1 - d / 220);
+      el.style.boxShadow = glow > .05
+        ? `0 0 ${(glow * 28).toFixed(0)}px rgba(255,32,96,${(glow * .22).toFixed(3)})`
+        : '';
+    });
+  });
+})();
+
+/* ══════════════════════════════════════════
+   SECTION SCROLL GRADIENT SHIFT
+══════════════════════════════════════════ */
+(function () {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:0;opacity:0;transition:background 1s,opacity .5s';
+  document.body.prepend(overlay);
+  const COLORS = ['rgba(255,32,96,.04)','rgba(0,204,255,.04)','rgba(200,255,0,.03)',
+                  'rgba(255,85,133,.04)','rgba(255,32,96,.04)','rgba(0,204,255,.04)','rgba(255,32,96,.04)'];
+  let lastIdx = -1;
+  window.addEventListener('scroll', () => {
+    const pct = window.scrollY / (document.body.scrollHeight - window.innerHeight);
+    const idx = Math.min(Math.floor(pct * 7), 6);
+    if (idx !== lastIdx) {
+      lastIdx = idx;
+      overlay.style.background = COLORS[idx];
+      overlay.style.opacity = '1';
+      if (typeof window.__burst3D === 'function') {
+        const Y3D = [-0, -20, -40, -80, -120, -160, -240][idx] || 0;
+        window.__burst3D(Y3D);
+      }
+    }
+  }, { passive: true });
+})();
+
+/* ══════════════════════════════════════════
+   ODOMETER COUNTER  (slot-machine style)
+══════════════════════════════════════════ */
+(function () {
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      const el  = e.target;
+      const end = parseInt(el.dataset.to);
+      let frame = 0;
+      const FRAMES = 38;
+      function tick() {
+        if (frame < FRAMES * .65) {
+          el.textContent = Math.floor(Math.random() * 99);
+        } else {
+          const p = (frame - FRAMES * .65) / (FRAMES * .35);
+          el.textContent = Math.round(end * Math.min(p, 1));
+        }
+        if (frame++ < FRAMES) requestAnimationFrame(tick);
+        else el.textContent = end;
+      }
+      tick();
+      io.unobserve(el);
+    });
+  }, { threshold: .6 });
+  $$('.ctr').forEach(el => io.observe(el));
+})();
+
+/* ══════════════════════════════════════════
+   SIDE NAV DOT TRAIL
+══════════════════════════════════════════ */
+(function () {
+  let activeDot = null;
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      const next = document.querySelector(`.sn-dot[href="#${e.target.id}"]`);
+      if (next && activeDot && next !== activeDot) {
+        const rA = activeDot.getBoundingClientRect();
+        const rB = next.getBoundingClientRect();
+        const steps = 6;
+        for (let i = 0; i < steps; i++) {
+          const t  = document.createElement('div');
+          t.className = 'sn-trail';
+          const p = i / steps;
+          t.style.cssText = `left:${(rA.left + (rB.left - rA.left) * p + 2).toFixed(0)}px;` +
+            `top:${(rA.top + (rB.top - rA.top) * p + 2).toFixed(0)}px;` +
+            `animation-delay:${(i * .04).toFixed(2)}s`;
+          document.body.appendChild(t);
+          t.addEventListener('animationend', () => t.remove(), { once: true });
+        }
+      }
+      activeDot = next;
+    });
+  }, { threshold: .35 });
+  $$('section[id]').forEach(s => io.observe(s));
 })();

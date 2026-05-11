@@ -967,3 +967,166 @@ img { display: block; max-width: 100%; }
   .sk-left       { padding-bottom: .25rem; }
   .bf-preview    { height: 110px; }
 }
+
+/* ════════════════════════════════════════
+   EXTRA ANIMATIONS
+════════════════════════════════════════ */
+
+/* Cursor trail spark */
+.cur-trail {
+  position: fixed; pointer-events: none; z-index: 9997;
+  width: 4px; height: 4px; border-radius: 50%;
+  transform: translate(-50%,-50%);
+  animation: ct-fade .55s ease-out forwards;
+}
+@keyframes ct-fade {
+  0%   { opacity: .75; transform: translate(-50%,-50%) scale(1); }
+  100% { opacity: 0;   transform: translate(-50%,-50%) scale(.12) translateY(-10px); }
+}
+
+/* Timeline spine draw — only add transition; initial clip-path set via JS */
+.tl-spine { transition: clip-path 1.5s cubic-bezier(.22,1,.36,1); }
+
+/* Section heading char split */
+.s-char {
+  display: inline-block;
+  transform: translateY(36px) rotate(5deg);
+  opacity: 0;
+  transition: opacity .45s var(--ease), transform .45s var(--ease);
+}
+.sec-label.in .s-char { opacity: 1; transform: translateY(0) rotate(0deg); }
+
+/* ════════════════════════════════════════
+   ANIMATION PACK v3
+════════════════════════════════════════ */
+
+/* ── Glitch effect ── */
+.hero-name { position: relative; }
+@keyframes g-clip {
+  0%   { clip-path: inset(42% 0 48% 0); transform: translate(-3px, 0); }
+  33%  { clip-path: inset(8%  0 82% 0); transform: translate(3px,  0); }
+  66%  { clip-path: inset(75% 0 18% 0); transform: translate(-2px, 0); }
+  100% { clip-path: inset(42% 0 48% 0); transform: translate(0,    0); }
+}
+.hero-glitch::before,
+.hero-glitch::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: inherit;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.hero-glitch::before { animation: g-clip .12s steps(1) 3;      left:  3px; }
+.hero-glitch::after  { animation: g-clip .12s steps(1) 3 -.05s; left: -3px; }
+
+/* ── Blur-to-sharp reveal ── */
+.blur-reveal {
+  filter: blur(7px); opacity: 0; transform: translateY(12px);
+  transition: filter .9s var(--ease), opacity .9s var(--ease), transform .9s var(--ease);
+}
+.blur-reveal.in { filter: blur(0); opacity: 1; transform: translateY(0); }
+
+/* ── Nav link underline draw ── */
+.nav-link { position: relative; }
+.nav-link::after {
+  content: ''; position: absolute; bottom: -2px; left: 0;
+  width: 0; height: 1px; background: var(--p1);
+  transition: width .3s var(--ease);
+}
+.nav-link:hover::after,
+.nav-link.active::after { width: 100%; }
+
+/* ── Button ripple ── */
+.btn-primary, .btn-ghost, .btn-resume { position: relative; overflow: hidden; }
+.btn-ripple {
+  position: absolute; border-radius: 50%;
+  background: rgba(255,255,255,.22); pointer-events: none;
+  transform: scale(0); animation: btn-rpl .55s ease-out forwards;
+}
+@keyframes btn-rpl { to { transform: scale(5); opacity: 0; } }
+
+/* ── Timeline dot pulse ── */
+.tl-dot { transition: transform .4s var(--ease), box-shadow .4s; }
+.tl-dot.dot-active {
+  transform: scale(1.7);
+  box-shadow: 0 0 0 5px rgba(255,32,96,.14), 0 0 22px var(--p1);
+}
+
+/* ── Skill icon bounce ── */
+@keyframes icon-bounce {
+  0%   { transform: translateY(0)   scale(1);    }
+  40%  { transform: translateY(-11px) scale(1.3); }
+  70%  { transform: translateY(-3px)  scale(1.05); }
+  100% { transform: translateY(0)   scale(1);    }
+}
+.sk-row:hover .sk-icon { display: inline-block; animation: icon-bounce .5s var(--ease); }
+
+/* ── Achievement card flip ── */
+.win-item, .cert-item { perspective: 900px; }
+.ach-flip-inner {
+  position: relative; width: 100%;
+  transform-style: preserve-3d;
+  transition: transform .6s var(--ease);
+}
+.win-item:hover .ach-flip-inner,
+.cert-item:hover .ach-flip-inner { transform: rotateY(180deg); }
+.ach-front, .ach-back {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.ach-back {
+  position: absolute; inset: 0; transform: rotateY(180deg);
+  display: flex; align-items: center; justify-content: center;
+  padding: 1rem 1.2rem; background: var(--glass);
+  font-family: var(--fm); font-size: .68rem; color: var(--p2);
+  letter-spacing: .06em; line-height: 1.7; text-align: center;
+}
+
+/* ── Ken Burns on about photo ── */
+@keyframes ken-burns {
+  0%   { transform: scale(1.0) translate(0%,    0%);    }
+  33%  { transform: scale(1.06) translate(-1.2%, -1%);  }
+  66%  { transform: scale(1.04) translate(1%,  -.6%);  }
+  100% { transform: scale(1.08) translate(-.5%,  1%);  }
+}
+.about-photo-panel img { animation: ken-burns 22s ease-in-out infinite alternate; }
+
+/* ── Reading progress glow ── */
+@keyframes bar-pulse {
+  0%,100% { box-shadow: 0 0 6px var(--p1), 0 0 14px rgba(255,32,96,.3); }
+  50%     { box-shadow: 0 0 14px var(--p1), 0 0 28px rgba(255,32,96,.55); }
+}
+.progress-bar {
+  box-shadow: 0 0 6px var(--p1), 0 0 14px rgba(255,32,96,.3);
+  animation: bar-pulse 2.2s ease-in-out infinite;
+}
+
+/* ── Film grain ── */
+#filmGrain {
+  position: fixed; inset: 0; z-index: 9999;
+  pointer-events: none; opacity: .034; mix-blend-mode: overlay;
+}
+
+/* ── Page reveal wipe ── */
+.page-wipe {
+  position: fixed; inset: 0; z-index: 99999;
+  background: var(--p1); pointer-events: none;
+  animation: wipe-out .7s ease .25s both;
+}
+@keyframes wipe-out { from { opacity: 1; } to { opacity: 0; } }
+
+/* ── Side nav dot trail ── */
+.sn-trail {
+  position: fixed; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--p2); pointer-events: none; z-index: 998;
+  animation: sn-tr .5s ease-out forwards;
+}
+@keyframes sn-tr {
+  0%   { opacity: .7; transform: scale(1);  }
+  100% { opacity: 0;  transform: scale(.1); }
+}
+
+/* ── Marquee speedup on hover ── */
+.marquee-strip:hover .marquee-track {
+  animation-duration: 9s !important;
+  animation-play-state: running !important;
+}
