@@ -1084,11 +1084,11 @@ $$('.btn-primary,.btn-ghost,.btn-resume,.bfl-btn').forEach(btn => {
   const el = document.getElementById('roleText');
   if (!el) return;
   const ROLES = [
+    'Senior Software Engineer',
+    'Agentic AI Builder',
+    'Cloud & Security Engineer',
     'Full-Stack Engineer',
-    'Blockchain Developer',
-    'React & Node.js Dev',
     'Open-Source Builder',
-    'UI / 3D Enthusiast',
   ];
   let ri = 0, ci = 0, deleting = false;
   const SPEED_TYPE = 55, SPEED_DEL = 30, PAUSE = 1900;
