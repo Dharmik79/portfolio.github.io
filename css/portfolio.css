@@ -67,7 +67,7 @@ html { scroll-behavior: smooth; }
 [data-theme="light"] #bgCanvas   { opacity: 0.18; }
 [data-theme="light"] .i-sun      { display: block; }
 [data-theme="light"] .i-moon     { display: none; }
-[data-theme="light"] .about-photo-panel img { filter: contrast(1.06) brightness(0.98) saturate(0.85); }
+[data-theme="light"] .about-photo-panel img { filter: contrast(1.12) brightness(1.02) saturate(1.08); }
 [data-theme="light"] .marquee-strip { background: rgba(234,234,255,.95); border-color: var(--border); }
 [data-theme="light"] .hero {
   background: rgba(244,244,255,.97);
@@ -497,7 +497,7 @@ img { display: block; max-width: 100%; }
 .about-photo-panel img {
   position: absolute; inset: 0;
   width: 100%; height: 100%; object-fit: cover; object-position: 50% 18%;
-  filter: contrast(1.06) brightness(0.92) saturate(0.82);
+  filter: contrast(1.15) brightness(1.04) saturate(1.12);
 }
 .aph-fallback {
   display: none; align-items: center; justify-content: center;
