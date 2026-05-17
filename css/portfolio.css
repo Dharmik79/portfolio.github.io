@@ -49,6 +49,7 @@ html { scroll-behavior: smooth; }
   --t3:    #6868A0;
   --p1:    #D4004A;
   --p2:    #FF2060;
+  --a1:    #D4004A;  /* override lime — invisible on light backgrounds */
   --border:  rgba(212,0,74,.12);
   --border2: rgba(212,0,74,.28);
   --glass:   rgba(244,244,255,.94);
@@ -63,7 +64,7 @@ html { scroll-behavior: smooth; }
 [data-theme="light"] .cert-item  { background: rgba(255,255,255,.92); }
 [data-theme="light"] .mob-nav    { background: rgba(244,244,255,.98); }
 [data-theme="light"] .spotlight  { display: none; }
-[data-theme="light"] #bgCanvas   { opacity: 0.22; mix-blend-mode: multiply; }
+[data-theme="light"] #bgCanvas   { opacity: 0.18; }
 [data-theme="light"] .i-sun      { display: block; }
 [data-theme="light"] .i-moon     { display: none; }
 [data-theme="light"] .about-photo-panel img { filter: grayscale(10%) brightness(.95); }
@@ -80,14 +81,12 @@ html { scroll-behavior: smooth; }
 }
 [data-theme="light"] .sk-row { border-color: var(--border); }
 [data-theme="light"] .sk-divider { background: var(--border); }
-/* Hero badge: lime is invisible on light bg — switch to accent red */
+/* Hero badge: lime border/bg are hardcoded — override for light */
 [data-theme="light"] .hero-badge {
-  color: var(--p1);
   border-color: rgba(212,0,74,.3);
   background: rgba(212,0,74,.06);
 }
 [data-theme="light"] .hero-badge-dot {
-  background: var(--p1);
   box-shadow: 0 0 8px rgba(212,0,74,.35);
 }
 /* Timeline tech tags: cyan is near-invisible on white cards */
