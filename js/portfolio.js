@@ -1558,22 +1558,27 @@ document.addEventListener('click', e => {
       if (!e.isIntersecting) return;
       const el  = e.target;
       const end = parseInt(el.dataset.to);
-      let frame = 0;
-      const FRAMES = 38;
-      function tick() {
-        if (frame < FRAMES * .65) {
-          el.textContent = Math.floor(Math.random() * 99);
-        } else {
-          const p = (frame - FRAMES * .65) / (FRAMES * .35);
-          el.textContent = Math.round(end * Math.min(p, 1));
-        }
-        if (frame++ < FRAMES) requestAnimationFrame(tick);
-        else el.textContent = end;
-      }
-      tick();
       io.unobserve(el);
+      /* Delay 450ms so the parent [data-reveal] fade-in has started
+         (reveal delay is 180ms + 750ms transition) before the counter
+         animates — ensures the user actually sees the counting animation. */
+      setTimeout(() => {
+        let frame = 0;
+        const FRAMES = 45;
+        function tick() {
+          if (frame < FRAMES * .55) {
+            el.textContent = Math.floor(Math.random() * 99);
+          } else {
+            const p = (frame - FRAMES * .55) / (FRAMES * .45);
+            el.textContent = Math.round(end * Math.min(p, 1));
+          }
+          if (frame++ < FRAMES) requestAnimationFrame(tick);
+          else el.textContent = end;
+        }
+        tick();
+      }, 450);
     });
-  }, { threshold: .6 });
+  }, { threshold: 0.1 });
   $$('.ctr').forEach(el => io.observe(el));
 })();
 
